@@ -1,0 +1,6 @@
+<launch>
+  <arg name="TODO" default=""/>
+  <node name="segment3d_docker" pkg="segment3d" type="segment3d_run.sh" output="screen">
+    <param name="TODO" value="$(arg TODO)" />
+  </node>
+</launch>

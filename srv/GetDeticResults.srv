@@ -1,0 +1,9 @@
+std_msgs/String target_name
+bool debug_mode
+---
+std_msgs/Float32MultiArray points
+std_msgs/Float32MultiArray colors
+bool[] target_mask
+bool[] background_mask
+geometry_msgs/Pose pose
+bool success
