@@ -40,6 +40,9 @@ RUN conda activate ovir3d && \
 	git+https://github.com/openai/CLIP.git \
 	git+https://github.com/facebookresearch/detectron2.git
 
+RUN conda activate ovir3d && \
+	python -c "import clip, torchclip.load('ViT-B/32', 'cuda' if torch.cuda.is_available() else 'cpu')"
+
 # Installing catkin package
 RUN mkdir -p /home/user/workspace/src/perception
 COPY --chown=user . /home/user/workspace/src/perception
