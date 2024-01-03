@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # NOTE: please use only standard libraries
+import os
 import argparse
 import subprocess
 from pathlib import Path
@@ -30,9 +31,10 @@ if __name__ == "__main__":
             /bin/bash -i -c \
             "source ~/.bashrc; \
             roscd segment3d; \
-            rossetip $ROS_IP; rossetmaster {host}; \
+            export ROS_IP={ip}; export ROS_MASTER={host}; export ROS_MASTER_URI=http://{host}:11311; \
             roslaunch segment3d segment3d.launch TODO:=todo"
             """.format(
+        ip=os.environ['ROS_IP'] if 'ROS_IP' in os.environ else '127.0.0.1',
         host=args.host,
     )
     print(docker_run_command)
