@@ -195,10 +195,10 @@ class DeticService:
         target_name = req.target_name.data
         print(f"{target_name = }")
 
-        camera_info = rospy.wait_for_message('/camera/color/camera_info', CameraInfo)
+        camera_info = req.cam_info
         cam_intr = np.array(camera_info.K).reshape((3, 3))
-        rgb_msg = rospy.wait_for_message('/camera/color/image_raw', Image)
-        depth_msg = rospy.wait_for_message('/camera/aligned_depth_to_color/image_raw', Image)
+        rgb_msg = req.color_img
+        depth_msg = req.depth_img
         rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
         depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
 
