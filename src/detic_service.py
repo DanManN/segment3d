@@ -49,7 +49,7 @@ def main():
     parser.add_argument("--pred_all_class", action='store_true')
     parser.add_argument("--confidence-threshold", type=float, default=0.3)
     parser.add_argument("--save_vis", action='store_true')
-    parser.add_argument("--depth_scale", type=float, default=1)
+    parser.add_argument("--depth_scale", type=float, default=1000)
     parser.add_argument("--opts", help="'KEY VALUE' pairs", default=[], nargs=argparse.REMAINDER)
     args = parser.parse_args()
 
