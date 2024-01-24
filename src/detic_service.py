@@ -298,6 +298,7 @@ class DeticService:
         ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
         ret.target_mask = target_mask_3d.flatten().tolist()
         ret.background_mask = background_mask_3d.flatten().tolist()
+        ret.target_image_mask = self.bridge.cv2_to_imgmsg(target_mask.astype(np.uint8), encoding="mono8")
         return ret
 
 
