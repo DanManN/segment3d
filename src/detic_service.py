@@ -245,6 +245,7 @@ class DeticService:
         similarity = pred_features @ vocab_feature
         best_match = similarity.argmax()
         target_mask = pred_masks[best_match]
+        target_mask = cv2.erode(target_mask.astype(float), np.ones((7, 7))).astype(bool)
         if req.debug_mode:
             print(f"{similarity = }")
             print(f"{best_match = }")
