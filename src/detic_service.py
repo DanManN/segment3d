@@ -47,7 +47,7 @@ def main():
                                                                  'scannet200', 'imagenet21k'])
     parser.add_argument("--custom_vocabulary", default="", help="comma separated words")
     parser.add_argument("--pred_all_class", action='store_true')
-    parser.add_argument("--confidence-threshold", type=float, default=0.3)
+    parser.add_argument("--confidence-threshold", type=float, default=0.5)
     parser.add_argument("--save_vis", action='store_true')
     parser.add_argument("--depth_scale", type=float, default=1000)
     parser.add_argument("--opts", help="'KEY VALUE' pairs", default=[], nargs=argparse.REMAINDER)
