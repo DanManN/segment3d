@@ -12,12 +12,12 @@ RUN echo 'user:user' | chpasswd
 
 # setup environment
 ENV DEBIAN_FRONTEND=noninteractive
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 RUN apt update && apt upgrade curl wget git -y
 
 # setup conda
-ENV PATH /home/user/miniconda3/bin:$PATH
+ENV PATH=/home/user/miniconda3/bin:$PATH
 RUN mkdir -p /home/user/miniconda3 && \
 	wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /home/user/miniconda3/miniconda.sh && \
 	bash /home/user/miniconda3/miniconda.sh -b -u -p /home/user/miniconda3 && \
@@ -43,9 +43,18 @@ RUN conda activate ovir3d && \
 RUN conda activate ovir3d && \
 	python -c "import clip, torchclip.load('ViT-B/32', 'cuda' if torch.cuda.is_available() else 'cpu')"
 
-# Installing catkin package
 RUN mkdir -p /home/user/workspace/src/perception
-COPY --chown=user . /home/user/workspace/src/perception
+COPY --chown=user ./requirements.txt /home/user/workspace/src/perception/
+RUN conda activate ovir3d && \
+	cd /home/user/workspace/src/perception && \
+	pip3 install -r requirements.txt && \
+	pip3 install --no-deps git+https://github.com/luca-medeiros/lang-segment-anything.git
+
+RUN conda activate ovir3d && \
+	python -c "from lang_sam import LangSAMLangSAM('vit_b')"
+
+# Installing catkin package
+COPY --chown=user . /home/user/workspace/src/perception/
 RUN source /opt/ros/noetic/setup.bash && \
 	conda activate ovir3d && \
 	cd /home/user/workspace && catkin_make

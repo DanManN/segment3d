@@ -1,0 +1,4 @@
+<launch>
+  <arg name="TODO" default=""/>
+  <node name="segment3d_sam_server" pkg="segment3d" type="run_container_sam.py" output="screen" args="-host $(optenv ROS_MASTER localhost)" />
+</launch>
