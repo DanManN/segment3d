@@ -16,7 +16,7 @@ import rospy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Pose
 from std_msgs.msg import Float32MultiArray
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import CameraInfo
 from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse
 
 
@@ -130,7 +130,8 @@ def get_result(req: GetDeticResultsRequest):
 
 
 if __name__ == '__main__':
+    rospy.init_node('detic_service')
     init_tracker_srv = rospy.Service(
-        'lang_sam_service', GetDeticResults, get_result
+        'detic_service', GetDeticResults, get_result
     )
     rospy.spin()

@@ -45,6 +45,7 @@ RUN conda activate ovir3d && \
 
 RUN mkdir -p /home/user/workspace/src/perception
 COPY --chown=user ./requirements.txt /home/user/workspace/src/perception/
+ENV CUDA_HOME=/usr/local/cuda-11.4
 RUN conda activate ovir3d && \
 	cd /home/user/workspace/src/perception && \
 	pip3 install -r requirements.txt && \

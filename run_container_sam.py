@@ -27,12 +27,12 @@ if __name__ == "__main__":
         docker run \
             --gpus all --rm -it --net=host \
             -e DISPLAY=${{DISPLAY}} -v /tmp:/tmp \
-            segment3d:latest \
+            segment3d-lsam:latest \
             /bin/bash -i -c \
             "source ~/.bashrc; \
-            roscd segment3d-lsam; \
+            roscd segment3d; \
             export ROS_IP={ip}; export ROS_MASTER={host}; export ROS_MASTER_URI=http://{host}:11311; \
-            roslaunch segment3d segment3d.launch TODO:=todo"
+            roslaunch segment3d segment3d_sam.launch TODO:=todo"
             """.format(
         ip=os.environ['ROS_IP'] if 'ROS_IP' in os.environ else '127.0.0.1',
         host=args.host,
