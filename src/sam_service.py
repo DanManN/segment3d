@@ -70,7 +70,8 @@ class SAMService:
         self.init_tracker_srv = rospy.Service(self.detic_srv_name, GetDeticResults, self.get_result)
 
         self.bridge = CvBridge()
-        self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
+        # self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
+        self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
 
     @staticmethod
     def generate_coordinate_frame(T, scale=0.05):
