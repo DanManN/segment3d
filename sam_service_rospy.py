@@ -142,19 +142,12 @@ class SAMService:
         print(f"{target_name = }")
 
         camera_info = req.cam_info
-        print("after")
         cam_intr = np.array(camera_info.K).reshape((3, 3))
-        print("after")
         rgb_msg = req.color_img
-        print("after")
         depth_msg = req.depth_img
-        print("after")
         rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
-        print("after")
         depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
-        print("after")
         image_pil = Image.fromarray(rgb_im)
-        print("after")
 
         if req.debug_mode:
             plt.imshow(rgb_im)
@@ -167,7 +160,7 @@ class SAMService:
         print("sent name size")
         self.client_socket.sendall(len(target_name).to_bytes(8, 'big'))
         print("sent name")
-        self.client_socket.sendall(target_name)
+        self.client_socket.sendall(target_name.to_bytes(len(target_name.encode('utf-8')), 'big'))
         with io.BytesIO() as output:
             image_pil.save(output, format="PNG")  # You can choose JPEG or PNG
             image_data = output.getvalue()
