@@ -20,7 +20,7 @@ from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResul
 import io
 import json
 import socket
-
+import time
 
 def main():
     print("Service starting JOE JOE JOE1")
@@ -33,7 +33,20 @@ def main():
     args = parser.parse_args()
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('localhost', 65432))
+    client_socket.settimeout(360)
+    #client_socket.connect(('localhost', 65432))
+    while True:
+        try:
+            # Attempt to connect to the server
+            client_socket.connect(('localhost', 65432))
+            print("Connected to the server.")
+            break  # Exit the loop if the connection is successful
+        except ConnectionRefusedError:
+            print("Connection refused. Server may not be running yet. Retrying in 3 seconds...")
+            time.sleep(3)  # Wait before trying again
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            time.sleep(3)  # Wait before trying again
 
     print("Service starting JOE JOE JOE3")
     detic_service = SAMService(args, client_socket)
@@ -160,7 +173,7 @@ class SAMService:
         print("sent name size")
         self.client_socket.sendall(len(target_name).to_bytes(8, 'big'))
         print("sent name")
-        self.client_socket.sendall(target_name.to_bytes(len(target_name.encode('utf-8')), 'big'))
+        self.client_socket.sendall(target_name.encode('utf-8'))
         with io.BytesIO() as output:
             image_pil.save(output, format="PNG")  # You can choose JPEG or PNG
             image_data = output.getvalue()
@@ -171,14 +184,28 @@ class SAMService:
         self.client_socket.sendall(image_data)
         
         # Wait for a response
+        print("going to receieve response size")
         response_size_raw = self.client_socket.recv(4)
         response_size = int.from_bytes(response_size_raw, 'big')
-        data = self.client_socket.recv(response_size)
+        print("received response size", response_size)
+
+        data = bytearray()  # To store the complete data as it arrives
+        chunk_size = 4096   # You can adjust the chunk size if needed
+        while len(data) < response_size:
+            # Receive the next chunk
+            chunk = self.client_socket.recv(min(chunk_size, response_size - len(data)))
+            if not chunk:
+                # If no data is received, it means the connection might be closed
+                raise ConnectionError("Connection lost before receiving all data")
+            data.extend(chunk)
+
+        #data = self.client_socket.recv(response_size)
         result = json.loads(data.decode())
-        print(f"Main: Received result from service: {result}")
-        masks = result["masks"]
-        boxes = result["boxes"]
-        logits = result["logits"]
+        print(f"Main: Received result from service")
+        masks = np.array(result["masks"], dtype=np.float32)[0] #it is (1, x, y) so [0] turns to (x, y)
+        print("number of target points", np.sum(masks))
+        #boxes = result["boxes"]
+        #logits = result["logits"]
         #masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
 
         # check if the returned values are empty
@@ -186,31 +213,32 @@ class SAMService:
             ret = GetDeticResultsResponse()
             ret.success = False
             return ret
-        select_idx = np.argmax(logits)
+        #select_idx = np.argmax(logits)
         
-        target_mask = np.asarray(masks[select_idx])
+        #target_mask = np.asarray(masks[select_idx])
+        target_mask = masks
 
         if req.debug_mode:
             plt.imshow(target_mask)
             plt.show()
 
-        select_idx = np.argmax(logits)
-        mask = masks[select_idx]
-        box = boxes[select_idx]
-        if req.debug_mode:
-            x1, y1, x2, y2 = [int(c) for c in box]
-            cv2.rectangle(image_cv, (x1, y1), (x2, y2), (0, 0, 255), 3)
-            print("mask: ")
-            print(mask)
-            mask = np.asarray(mask).astype(int)
-            print('mask shape:', mask.shape)
-            print('image shape: ', image_cv.shape)
-            color = np.array([0,255,0], dtype='uint8')
-            masked_img = np.where(mask[...,None], color, image_cv)
-            out = cv2.addWeighted(image_cv, 0.8, masked_img, 0.2,0)
-            cv2.imshow("Image", out)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+        #select_idx = np.argmax(logits)
+        #mask = masks[select_idx]
+        #box = boxes[select_idx]
+        #if req.debug_mode:
+        #    x1, y1, x2, y2 = [int(c) for c in box]
+        #    cv2.rectangle(image_cv, (x1, y1), (x2, y2), (0, 0, 255), 3)
+        #    print("mask: ")
+        #    print(mask)
+        #    mask = np.asarray(mask).astype(int)
+        #    print('mask shape:', mask.shape)
+        #    print('image shape: ', image_cv.shape)
+        #    color = np.array([0,255,0], dtype='uint8')
+        #    masked_img = np.where(mask[...,None], color, image_cv)
+        #    out = cv2.addWeighted(image_cv, 0.8, masked_img, 0.2,0)
+        #    cv2.imshow("Image", out)
+        #    cv2.waitKey(0)
+        #    cv2.destroyAllWindows()
 
 
         scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
@@ -219,6 +247,8 @@ class SAMService:
         table_plane, table_indices = self.plane_detection_o3d(scene_pcd, inlier_thresh=0.01, visualize=req.debug_mode)
 
         masked_depth_im = depth_im * target_mask
+        #print(type(masked_depth_im), type(depth_im), type(target_mask))
+        #print(target_mask.shape, depth_im.shape)
         target_pcd = create_pcd(masked_depth_im, cam_intr, color_im=rgb_im)
 
         scene_kdtree = KDTree(scene_pts)
