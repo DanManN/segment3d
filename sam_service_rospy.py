@@ -10,8 +10,6 @@ from PIL import Image
 from scipy.spatial import KDTree
 from matplotlib import pyplot as plt
 
-from lang_sam import LangSAM
-
 # ROS library
 import rospy
 from cv_bridge import CvBridge
@@ -19,11 +17,14 @@ from geometry_msgs.msg import Pose
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo
 from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse
+import io
+import json
+import socket
 
 
 def main():
     print("Service starting JOE JOE JOE1")
-    rospy.init_node('detic_service', log_level=rospy.DEBUG)
+    rospy.init_node('detic_service')
     #rospy.init_node('test', log_level=rospy.DEBUG)
     print("Service starting JOE JOE JOE2")
 
@@ -31,8 +32,11 @@ def main():
     parser.add_argument("--depth_scale", type=float, default=1000)
     args = parser.parse_args()
 
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect(('localhost', 65432))
+
     print("Service starting JOE JOE JOE3")
-    detic_service = SAMService(args)
+    detic_service = SAMService(args, client_socket)
     print("Detic service started. Waiting for requests...")
     rospy.spin()
 
@@ -68,15 +72,17 @@ def create_pcd(
 
 class SAMService:
 
-    def __init__(self, args):
+    def __init__(self, args, client_socket):
         self.args = args
         self.detic_srv_name = 'detic_service'
         self.init_tracker_srv = rospy.Service(self.detic_srv_name, GetDeticResults, self.get_result)
 
+        self.client_socket = client_socket
+
         self.bridge = CvBridge()
         # self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
-        print("before choosing model")
-        self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
+        #print("before choosing model")
+        #self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
 
     @staticmethod
     def generate_coordinate_frame(T, scale=0.05):
@@ -136,12 +142,19 @@ class SAMService:
         print(f"{target_name = }")
 
         camera_info = req.cam_info
+        print("after")
         cam_intr = np.array(camera_info.K).reshape((3, 3))
+        print("after")
         rgb_msg = req.color_img
+        print("after")
         depth_msg = req.depth_img
+        print("after")
         rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
+        print("after")
         depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
+        print("after")
         image_pil = Image.fromarray(rgb_im)
+        print("after")
 
         if req.debug_mode:
             plt.imshow(rgb_im)
@@ -151,7 +164,29 @@ class SAMService:
 
         bgr_im = cv2.cvtColor(rgb_im, cv2.COLOR_RGB2BGR)
 
-        masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
+        print("sent name size")
+        self.client_socket.sendall(len(target_name).to_bytes(8, 'big'))
+        print("sent name")
+        self.client_socket.sendall(target_name)
+        with io.BytesIO() as output:
+            image_pil.save(output, format="PNG")  # You can choose JPEG or PNG
+            image_data = output.getvalue()
+        image_size = len(image_data)
+        print("Sending msg to service of size")
+        self.client_socket.sendall(image_size.to_bytes(8, 'big'))
+        print("Sending msg to service of image")
+        self.client_socket.sendall(image_data)
+        
+        # Wait for a response
+        response_size_raw = self.client_socket.recv(4)
+        response_size = int.from_bytes(response_size_raw, 'big')
+        data = self.client_socket.recv(response_size)
+        result = json.loads(data.decode())
+        print(f"Main: Received result from service: {result}")
+        masks = result["masks"]
+        boxes = result["boxes"]
+        logits = result["logits"]
+        #masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
 
         # check if the returned values are empty
         if len(masks) == 0:

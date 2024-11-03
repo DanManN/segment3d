@@ -9,6 +9,7 @@ RUN echo "user ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/user && \
 	chsh -s /bin/bash user
 RUN echo 'root:root' | chpasswd
 RUN echo 'user:user' | chpasswd
+RUN chown -R user:user /home/user
 
 # setup environment
 ENV DEBIAN_FRONTEND=noninteractive
@@ -27,17 +28,19 @@ RUN mkdir -p /home/user/miniconda3 && \
 USER user
 SHELL ["/usr/bin/bash", "-ic"]
 
-RUN conda create -n ovir3d python=3.11 && conda init bash
-# RUN conda activate ovir3d && conda install libffi==3.3
+RUN conda create -n ovir3d python=3.10 && conda init bash
+RUN conda create -n langsam python=3.11
 
 # ENV CUDA_HOME=/usr/local/cuda-11.4
-RUN conda activate ovir3d && \
-	pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu118
+#RUN conda activate ovir3d && \
+#	conda install -y nvidia::cuda-toolkit
+#RUN conda activate ovir3d && \
+#	pip install torch==2.4.1 torchvision==0.19.1
 RUN conda activate ovir3d && \
 	pip3 install rospkg catkin-pkg open3d scikit-image scikit-learn torchmetrics cupy-cuda11x opencv-python
-RUN conda activate ovir3d && \
+RUN conda activate langsam && \
 	pip install -U git+https://github.com/luca-medeiros/lang-segment-anything.git
-RUN conda activate ovir3d && \
+RUN conda activate langsam && \
 	# python -c "from lang_sam import LangSAMLangSAM('vit_b')"
 	python -c "from lang_sam import LangSAMLangSAM()"
 
@@ -45,11 +48,22 @@ RUN conda activate ovir3d && \
 	pip uninstall em && \
 	pip install empy==3.3.4
 
+RUN sudo apt update
+RUN sudo apt-get install -y tmux
+
 # Installing catkin package
 COPY --chown=user . /home/user/workspace/src/perception/
+RUN ls -l /home/user/workspace && \
+	ls -l /home/user/workspace/src
+USER root
+RUN chown -R user /home/user/workspace
+USER user
+RUN chmod 777 /home/user/workspace/src/perception/run_both.sh
 RUN source /opt/ros/noetic/setup.bash && \
 	conda activate ovir3d && \
 	cd /home/user/workspace && catkin_make
+
+RUN conda activate ovir3d && conda install libffi==3.3
 
 # update bashrc
 RUN echo "source ~/workspace/devel/setup.bash" >> ~/.bashrc && \

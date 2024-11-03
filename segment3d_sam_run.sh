@@ -8,4 +8,4 @@ else
 	micromamba activate ovir3d
 fi
 cd $(rospack find segment3d)/src
-python sam_service.py
+python test.py
