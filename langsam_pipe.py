@@ -70,6 +70,11 @@ def main():
                 #dictionary of masks and mask scores
                 results = model.predict([image], [name])[0] #Its a list of dictionaries so just take the first value
                 print(results)
+                if isinstance(results["masks"], list): #This means it found no segmentation
+                    response_length = 9
+                    conn.sendall(response_length.to_bytes(4, 'big')) #signal
+                    continue
+
                 response = {
                     "masks": results["masks"].tolist()#,
                     #"logits": results["mask_scores"].item()

@@ -188,6 +188,10 @@ class SAMService:
         response_size_raw = self.client_socket.recv(4)
         response_size = int.from_bytes(response_size_raw, 'big')
         print("received response size", response_size)
+        if response_size == 9:
+            ret = GetDeticResultsResponse()
+            ret.success = False
+            return ret
 
         data = bytearray()  # To store the complete data as it arrives
         chunk_size = 4096   # You can adjust the chunk size if needed
