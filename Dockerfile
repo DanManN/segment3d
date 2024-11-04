@@ -36,7 +36,7 @@ RUN conda create -n langsam python=3.11
 #	conda install -y nvidia::cuda-toolkit
 RUN conda activate ovir3d && conda install libffi==3.3
 RUN conda activate ovir3d && \
-	pip3 install rospkg catkin-pkg open3d scikit-image scikit-learn torchmetrics cupy-cuda11x opencv-python
+	pip3 install rospkg catkin-pkg open3d scikit-image scikit-learn torchmetrics cupy-cuda11x opencv-python matplotlib
 RUN conda activate langsam && \
 	pip install torch==2.4.1 torchvision==0.19.1
 RUN conda activate langsam && \
