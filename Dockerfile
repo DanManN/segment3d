@@ -15,7 +15,7 @@ RUN chown -R user:user /home/user
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-RUN apt update && apt upgrade curl wget git -y \
+RUN apt update && apt upgrade curl wget git tmux -y \
 	&& rm -rf /var/lib/apt/lists/*
 
 # setup conda
@@ -34,36 +34,27 @@ RUN conda create -n langsam python=3.11
 # ENV CUDA_HOME=/usr/local/cuda-11.4
 #RUN conda activate ovir3d && \
 #	conda install -y nvidia::cuda-toolkit
-#RUN conda activate ovir3d && \
-#	pip install torch==2.4.1 torchvision==0.19.1
+RUN conda activate ovir3d && conda install libffi==3.3
 RUN conda activate ovir3d && \
 	pip3 install rospkg catkin-pkg open3d scikit-image scikit-learn torchmetrics cupy-cuda11x opencv-python
 RUN conda activate langsam && \
+	pip install torch==2.4.1 torchvision==0.19.1
+RUN conda activate langsam && \
 	pip install -U git+https://github.com/luca-medeiros/lang-segment-anything.git
 RUN conda activate langsam && \
-	# python -c "from lang_sam import LangSAMLangSAM('vit_b')"
 	python -c "from lang_sam import LangSAMLangSAM()"
 
 RUN conda activate ovir3d && \
 	pip uninstall em && \
 	pip install empy==3.3.4
 
-RUN sudo apt update
-RUN sudo apt-get install -y tmux
-
 # Installing catkin package
+RUN mkdir -p /home/user/workspace
 COPY --chown=user . /home/user/workspace/src/perception/
-RUN ls -l /home/user/workspace && \
-	ls -l /home/user/workspace/src
-USER root
-RUN chown -R user /home/user/workspace
-USER user
-RUN chmod 777 /home/user/workspace/src/perception/run_both.sh
+RUN sudo chown -R user:user /home/user/workspace
 RUN source /opt/ros/noetic/setup.bash && \
 	conda activate ovir3d && \
 	cd /home/user/workspace && catkin_make
-
-RUN conda activate ovir3d && conda install libffi==3.3
 
 # update bashrc
 RUN echo "source ~/workspace/devel/setup.bash" >> ~/.bashrc && \
