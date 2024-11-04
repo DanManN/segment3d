@@ -189,8 +189,31 @@ class SAMService:
         response_size = int.from_bytes(response_size_raw, 'big')
         print("received response size", response_size)
         if response_size == 9:
+            scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
+            scene_pts = np.asarray(scene_pcd.points)
+            scene_rgb = np.asarray(scene_pcd.colors)
+            #_, table_indices = self.plane_detection_o3d(scene_pcd, inlier_thresh=0.01, visualize=req.debug_mode)
+
+            scene_kdtree = KDTree(scene_pts)
+            #target_pts = np.asarray(target_pcd.points)
+            #_, target_indices = scene_kdtree.query(target_pts)
+            target_mask_3d = np.zeros(scene_pts.shape[0], dtype=np.bool_)
+            #target_mask_3d[target_indices] = True
+
+            background_mask_3d = np.ones(scene_pts.shape[0], dtype=np.bool_)
+            #background_mask_3d[table_indices] = False
+            #background_mask_3d[target_indices] = False
+
+            target_mask = np.zeros_like(depth_im)
+
             ret = GetDeticResultsResponse()
-            ret.success = False
+            ret.success = True
+            # ret.pose = pose_msg  # this one is not used
+            ret.points = Float32MultiArray(data=scene_pts.flatten().tolist())
+            ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
+            ret.target_mask = target_mask_3d.flatten().tolist() #all zeros
+            ret.background_mask = background_mask_3d.flatten().tolist()
+            ret.target_image_mask = self.bridge.cv2_to_imgmsg(target_mask.astype(np.uint8), encoding="mono8")
             return ret
 
         data = bytearray()  # To store the complete data as it arrives
