@@ -6,7 +6,7 @@ import argparse
 import cv2
 import numpy as np
 import open3d as o3d
-from PIL import Image
+from PIL import Image as PIL_Image
 from scipy.spatial import KDTree
 from matplotlib import pyplot as plt
 
@@ -17,7 +17,7 @@ import rospy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Pose
 from std_msgs.msg import Float32MultiArray
-from sensor_msgs.msg import CameraInfo
+from sensor_msgs.msg import CameraInfo, Image
 from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse
 
 
@@ -77,6 +77,8 @@ class SAMService:
         # self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
         print("before choosing model")
         self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
+        self.seg_img_pub_d435 = rospy.Publisher('d435_seg_img', Image)
+        self.seg_img_pub_d455 = rospy.Publisher('d455_seg_img', Image)
 
     @staticmethod
     def generate_coordinate_frame(T, scale=0.05):
@@ -141,7 +143,7 @@ class SAMService:
         depth_msg = req.depth_img
         rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
         depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
-        image_pil = Image.fromarray(rgb_im)
+        image_pil = PIL_Image.fromarray(rgb_im)
 
         if req.debug_mode:
             plt.imshow(rgb_im)
@@ -151,7 +153,7 @@ class SAMService:
 
         bgr_im = cv2.cvtColor(rgb_im, cv2.COLOR_RGB2BGR)
 
-        masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
+        masks, boxes, phrases, logits = self.model.predict(image_pil, target_name, box_threshold=0.3, text_threshold=0.7)
 
         # check if the returned values are empty
         if len(masks) == 0:
@@ -170,6 +172,7 @@ class SAMService:
         mask = masks[select_idx]
         box = boxes[select_idx]
         if req.debug_mode:
+            image_cv = np.array(bgr_im)
             x1, y1, x2, y2 = [int(c) for c in box]
             cv2.rectangle(image_cv, (x1, y1), (x2, y2), (0, 0, 255), 3)
             print("mask: ")
@@ -183,6 +186,20 @@ class SAMService:
             cv2.imshow("Image", out)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
+
+        if True:  # publish segmented images
+            image_cv = np.array(bgr_im)
+            x1, y1, x2, y2 = [int(c) for c in box]
+            cv2.rectangle(image_cv, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            mask = np.asarray(mask).astype(int)
+            color = np.array([0,255,0], dtype='uint8')
+            masked_img = np.where(mask[...,None], color, image_cv)
+            out = cv2.addWeighted(image_cv, 0.8, masked_img, 0.2,0)
+            seg_msg = self.bridge.cv2_to_imgmsg(out)
+            if camera_info.header.frame_id[:4] == 'd435':
+                self.seg_img_pub_d435.publish(seg_msg)
+            if camera_info.header.frame_id[:4] == 'd455':
+                self.seg_img_pub_d455.publish(seg_msg)
 
 
         scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
