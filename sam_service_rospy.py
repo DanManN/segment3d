@@ -23,6 +23,13 @@ import socket
 import time
 
 def main():
+    server = 'localhost'
+    port = '65372'
+    using_server = True
+    if using_server == True:
+        server = 'arrakis.cs.rutgers.edu'
+        port = 8080
+
     print("Service starting JOE JOE JOE1")
     rospy.init_node('detic_service')
     #rospy.init_node('test', log_level=rospy.DEBUG)
@@ -38,11 +45,11 @@ def main():
     while True:
         try:
             # Attempt to connect to the server
-            client_socket.connect(('localhost', 65432))
+            client_socket.connect((server, port))
             print("Connected to the server.")
             break  # Exit the loop if the connection is successful
         except ConnectionRefusedError:
-            print("Connection refused. Server may not be running yet. Retrying in 3 seconds...")
+            print("[JOE] This should take like 5 tries or something so just let it run. Connection refused. Server may not be running yet. Retrying in 3 seconds...")
             time.sleep(3)  # Wait before trying again
         except Exception as e:
             print(f"An error occurred: {e}")

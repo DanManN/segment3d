@@ -24,11 +24,17 @@ import socket
 
 
 def main():
+    server = 'localhost'
+    port = '65432'
+    using_server = True
+    if using_server == True:
+        server = 'arrakis.cs.rutgers.edu'
+        port = 8080
     model = LangSAM()
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('localhost', 65432))
+    server_socket.bind((server, port))
     server_socket.listen()
-    print("Service is listening on port 65432...")
+    print("Service is listening on port...")
     while True:
         conn, addr = server_socket.accept()
         with conn:
