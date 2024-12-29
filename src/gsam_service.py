@@ -2,6 +2,8 @@
 import sys
 import copy
 import argparse
+import io
+import json
 
 import cv2
 import numpy as np
@@ -9,6 +11,7 @@ import open3d as o3d
 from PIL import Image
 from scipy.spatial import KDTree
 from matplotlib import pyplot as plt
+import zmq
 
 from lang_sam import LangSAM
 
@@ -21,19 +24,19 @@ from sensor_msgs.msg import CameraInfo
 from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse
 
 
+
 def main():
-    print("Service starting JOE JOE JOE1")
+    print("Service starting")
     rospy.init_node('detic_service', log_level=rospy.DEBUG)
     #rospy.init_node('test', log_level=rospy.DEBUG)
-    print("Service starting JOE JOE JOE2")
+    print("Node initialized")
 
     parser = argparse.ArgumentParser(description="SAM")
     parser.add_argument("--depth_scale", type=float, default=1000)
     args = parser.parse_args()
 
-    print("Service starting JOE JOE JOE3")
-    detic_service = SAMService(args)
-    print("Detic service started. Waiting for requests...")
+    _ = SAMService(args)
+    print("Gsam service started. Waiting for requests...")
     rospy.spin()
 
 
@@ -75,8 +78,17 @@ class SAMService:
 
         self.bridge = CvBridge()
         # self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
-        print("before choosing model")
-        self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
+        #print("before choosing model")
+        #self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
+        
+        #Create the zmq socket
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.REQ) #Make sure to use REQ
+        print("trying to connect to server gsam port")
+        #socket.connect("tcp://:8091")
+        self.socket.connect("tcp://0.0.0.0:8091")
+        print("Client connected")
+        self.it = 0
 
     @staticmethod
     def generate_coordinate_frame(T, scale=0.05):
@@ -124,10 +136,10 @@ class SAMService:
         plane_frame[:3, 2] = plane_normal
         plane_frame[:3, 3] = origin
 
-        if visualize:
-            plane_frame_vis = DeticService.generate_coordinate_frame(plane_frame, scale=0.05)
-            cam_frame_vis = DeticService.generate_coordinate_frame(np.eye(4), scale=0.05)
-            o3d.visualization.draw_geometries([inlier_cloud, outlier_cloud, plane_frame_vis, cam_frame_vis])
+        #if visualize:
+        #    plane_frame_vis = DeticService.generate_coordinate_frame(plane_frame, scale=0.05)
+        #    cam_frame_vis = DeticService.generate_coordinate_frame(np.eye(4), scale=0.05)
+        #    o3d.visualization.draw_geometries([inlier_cloud, outlier_cloud, plane_frame_vis, cam_frame_vis])
 
         return plane_frame, inliers
 
@@ -151,39 +163,52 @@ class SAMService:
 
         bgr_im = cv2.cvtColor(rgb_im, cv2.COLOR_RGB2BGR)
 
-        masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
+        #-------------Here we do the model predict which first sends the inputs from req and gets the results then fixes them up to the right format:--------------------------
+        #masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
+        print("target name", target_name)
+        send_string = target_name
+        image_stream = io.BytesIO()
+        image_pil.save(image_stream, format="JPEG")  #Save image in JPEG format
+        image_data = image_stream.getvalue()  #Get byte data
+        #socket.send(image_data) #Send the serialized image
 
-        # check if the returned values are empty
-        if len(masks) == 0:
+        message = [send_string.encode(), image_data]
+        self.socket.send_multipart(message) #SENDING text and image
+        print("sent text and image data from gsam")
+
+        #To receive it blocks until it receives
+        message_parts = self.socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+        metadata = message_parts[0].decode()  # Decode as string
+        metadata = json.loads(metadata)
+        print(f"Received metadata from gsam server: {metadata}")
+        #Bytes
+        mask_bytes = message_parts[1]
+        if metadata["shape"] == [0]:  # Adjust condition based on your metadata structure
+            print("-----------No masks returned-------------")
             ret = GetDeticResultsResponse()
             ret.success = False
             return ret
-        select_idx = np.argmax(logits)
-        
-        target_mask = np.asarray(masks[select_idx]) #Here is where we use the masks
+        else:
+            # Deserialize the mask
+            masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(metadata["shape"])
+            print("masks shape", masks.shape) #It is a number of masks by image size np array
 
-        if req.debug_mode:
-            plt.imshow(target_mask)
-            plt.show()
+        image_cv2 = np.array(image_pil)
+        for mask in masks:
+            mask = (mask > 0.5).astype(np.uint8)
+            print("mask shape", mask.shape)
+            color = np.random.randint(0, 255, (3,), dtype=np.uint8)  # Random color
+            colored_mask = np.zeros_like(image_cv2, dtype=np.uint8)
+            print("colored mask shape in full", colored_mask.shape)
+            for c in range(3):
+                print("colored mask shape", colored_mask[:, :, c].shape, "color shape", color[c].shape)
+                colored_mask[:, :, c] = mask * color[c]
+            image_cv2 = cv2.addWeighted(image_cv2, 0.9, colored_mask, 0.1, 0)
+        cv2.imwrite(f"gsam_output/gsamservice_output_{self.it}.jpg", image_cv2)
 
-        select_idx = np.argmax(logits)
-        mask = masks[select_idx]
-        box = boxes[select_idx]
-        if req.debug_mode:
-            x1, y1, x2, y2 = [int(c) for c in box]
-            cv2.rectangle(image_cv, (x1, y1), (x2, y2), (0, 0, 255), 3)
-            print("mask: ")
-            print(mask)
-            mask = np.asarray(mask).astype(int)
-            print('mask shape:', mask.shape)
-            print('image shape: ', image_cv.shape)
-            color = np.array([0,255,0], dtype='uint8')
-            masked_img = np.where(mask[...,None], color, image_cv)
-            out = cv2.addWeighted(image_cv, 0.8, masked_img, 0.2,0)
-            cv2.imshow("Image", out)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-
+        #Choose one mask as the mask we are going to use, or aggregate all the masks together that we found. 
+        #Is there a way to see the confidence for it?
+        target_mask = masks[0]#np.asarray(masks[select_idx]) #Here is where we use the masks
 
         scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
         scene_pts = np.asarray(scene_pcd.points)

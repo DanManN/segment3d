@@ -27,7 +27,7 @@ def main():
     port = '65372'
     using_server = True
     if using_server == True:
-        server = 'arrakis.cs.rutgers.edu'
+        server = '172.16.71.50'
         port = 8080
 
     print("Service starting JOE JOE JOE1")

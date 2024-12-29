@@ -25,14 +25,14 @@ if __name__ == "__main__":
 
     docker_run_command = """
         docker run \
-            --gpus all --rm -it --net=host \
+            --gpus all --rm -it -p 8091:8091 --net=host \
             -e DISPLAY=${{DISPLAY}} -v /tmp:/tmp \
-            segment3d-lsam:latest \
+            groundedsam:stream \
             /bin/bash -i -c \
             "source ~/.bashrc; \
             roscd segment3d; \
             export ROS_IP={ip}; export ROS_MASTER={host}; export ROS_MASTER_URI=http://{host}:11311; \
-            ./run_both.sh no yes"
+            python server_gsam.py"
             """.format(
         ip=os.environ['ROS_IP'] if 'ROS_IP' in os.environ else '127.0.0.1',
         host=args.host,
