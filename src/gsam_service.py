@@ -13,7 +13,7 @@ from scipy.spatial import KDTree
 from matplotlib import pyplot as plt
 import zmq
 
-from lang_sam import LangSAM
+#from lang_sam import LangSAM
 
 # ROS library
 import rospy
