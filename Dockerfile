@@ -46,7 +46,8 @@ RUN conda activate langsam && \
 
 RUN conda activate ovir3d && \
 	pip uninstall em && \
-	pip install empy==3.3.4
+	pip install empy==3.3.4 && \
+	pip install pyzmq	
 
 RUN sudo apt update
 RUN sudo apt-get install -y tmux

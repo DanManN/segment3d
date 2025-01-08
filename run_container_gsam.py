@@ -23,6 +23,7 @@ if __name__ == "__main__":
 
     # assert args.c is not None
 
+    print("This is just for running locally it opens up the groundedsam from the Grounded-SAM-iterative repo and runs it")
     docker_run_command = """
         docker run \
             --gpus all --rm -it -p 8091:8091 --net=host \
