@@ -12,8 +12,9 @@ from PIL import Image
 from scipy.spatial import KDTree
 from matplotlib import pyplot as plt
 import zmq
+import time
 
-from lang_sam import LangSAM
+#from lang_sam import LangSAM
 
 # ROS library
 import rospy
@@ -154,6 +155,12 @@ class SAMService:
         rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
         depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
         image_pil = Image.fromarray(rgb_im)
+        print("Image Info:")
+        print(f"Format: {image_pil.format}")          # Image format (e.g., JPEG, PNG)
+        print(f"Size: {image_pil.size}")              # Image size (width, height)
+        print(f"Mode: {image_pil.mode}")              # Image mode (e.g., RGB, RGBA, L)
+        if image_pil.mode != "RGB":
+            image_pil = image_pil.convert("RGB")
 
         if req.debug_mode:
             plt.imshow(rgb_im)
@@ -172,6 +179,7 @@ class SAMService:
         image_data = image_stream.getvalue()  #Get byte data
         #socket.send(image_data) #Send the serialized image
 
+        t0 = time.time()
         message = [send_string.encode(), image_data]
         self.socket.send_multipart(message) #SENDING text and image
         print("sent text and image data from gsam")
@@ -192,19 +200,22 @@ class SAMService:
             # Deserialize the mask
             masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(metadata["shape"])
             print("masks shape", masks.shape) #It is a number of masks by image size np array
+        print("time perception took", time.time() - t0)
 
         image_cv2 = np.array(image_pil)
-        for mask in masks:
+        print("masks shape", masks.shape)
+        #for mask in masks:
+        if True:
+            mask = masks[0]
             mask = (mask > 0.5).astype(np.uint8)
-            print("mask shape", mask.shape)
-            color = np.random.randint(0, 255, (3,), dtype=np.uint8)  # Random color
+            color = np.random.randint(0, 255, (3,), dtype=np.uint8)
             colored_mask = np.zeros_like(image_cv2, dtype=np.uint8)
-            print("colored mask shape in full", colored_mask.shape)
             for c in range(3):
-                print("colored mask shape", colored_mask[:, :, c].shape, "color shape", color[c].shape)
                 colored_mask[:, :, c] = mask * color[c]
-            image_cv2 = cv2.addWeighted(image_cv2, 0.9, colored_mask, 0.1, 0)
-        cv2.imwrite(f"gsam_output/gsamservice_output_{self.it}.jpg", image_cv2)
+            image_cv2 = cv2.bitwise_and(image_cv2, image_cv2, mask=1-mask)  # Keep original image where mask is 0
+            image_cv2 = cv2.add(image_cv2, colored_mask)  # Add colored mask only where mask is 1
+        cv2.imwrite(f"/tmp/tmp_joe/gsamservice_output_{self.it}.jpg", image_cv2)
+        self.it += 1
 
         #Choose one mask as the mask we are going to use, or aggregate all the masks together that we found. 
         #Is there a way to see the confidence for it?

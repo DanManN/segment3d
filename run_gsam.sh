@@ -6,7 +6,7 @@ gsam_server=$1
 
 #If any arg
 if [ -n "$gsam_server" ]; then
-    SESSION_NAME="joe_session"
+    SESSION_NAME="joe_session_gsam"
 
     #Run the docker container
     tmux new-session -d -s $SESSION_NAME
