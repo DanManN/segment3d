@@ -1,6 +1,7 @@
 /src/models/
 *.Identifier
 cache/*
+Grounded-SAM-2-iterative/
 # Created by https://www.toptal.com/developers/gitignore/api/python,ros
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,ros
 
