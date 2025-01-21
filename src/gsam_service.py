@@ -1,4 +1,4 @@
-#/usr/bin/env python3
+#!/usr/bin/env python3
 import sys
 import copy
 import argparse
@@ -34,9 +34,9 @@ def main():
 
     parser = argparse.ArgumentParser(description="SAM")
     parser.add_argument("--depth_scale", type=float, default=1000)
-    args = parser.parse_args()
+    args = parser.parse_known_args()
 
-    _ = SAMService(args)
+    SAMService(args[0])
     print("Gsam service started. Waiting for requests...")
     rospy.spin()
 

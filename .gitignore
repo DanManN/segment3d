@@ -1,4 +1,6 @@
 /src/models/
+*.Identifier
+cache/*
 # Created by https://www.toptal.com/developers/gitignore/api/python,ros
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,ros
 

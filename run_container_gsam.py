@@ -28,10 +28,11 @@ if __name__ == "__main__":
         docker run \
             --gpus all --rm -it -p 8091:8091 --net=host \
             -e DISPLAY=${{DISPLAY}} -v /tmp:/tmp \
+            -v $(rospack find segment3d)/cache:/root/.cache \
+            -v $(rospack find segment3d)/Grounded-SAM-2-iterative:/home/appuser/Grounded-SAM-2 \
             groundedsam:stream \
             /bin/bash -i -c \
             "source ~/.bashrc; \
-            roscd segment3d; \
             export ROS_IP={ip}; export ROS_MASTER={host}; export ROS_MASTER_URI=http://{host}:11311; \
             python server_gsam.py"
             """.format(

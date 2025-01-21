@@ -1,0 +1,5 @@
+<launch>
+  <arg name="TODO" default=""/>
+  <node name="segment3d_gsam_server" pkg="segment3d" type="run_container_gsam.py" output="screen" args="-host $(optenv ROS_MASTER localhost)" />
+  <node name="segment3d_gsam_client" pkg="segment3d" type="gsam_service.py" output="screen" />
+</launch>

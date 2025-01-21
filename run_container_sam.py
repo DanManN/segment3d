@@ -32,7 +32,7 @@ if __name__ == "__main__":
             "source ~/.bashrc; \
             roscd segment3d; \
             export ROS_IP={ip}; export ROS_MASTER={host}; export ROS_MASTER_URI=http://{host}:11311; \
-            ./run_both.sh no yes"
+            roslaunch segment3d segment3d_sam.launch pipe:=true"
             """.format(
         ip=os.environ['ROS_IP'] if 'ROS_IP' in os.environ else '127.0.0.1',
         host=args.host,
