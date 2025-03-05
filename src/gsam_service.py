@@ -194,7 +194,15 @@ class SAMService:
         if metadata["shape"] == [0]:  # Adjust condition based on your metadata structure
             print("-----------No masks returned-------------")
             ret = GetDeticResultsResponse()
-            ret.success = False
+            ret.success = True
+            scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
+            scene_pts = np.asarray(scene_pcd.points)
+            scene_rgb = np.asarray(scene_pcd.colors)
+            ret.points = Float32MultiArray(data=scene_pts.flatten().tolist())
+            ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
+            # ret.target_mask = target_mask_3d.flatten().tolist()
+            # ret.background_mask = background_mask_3d.flatten().tolist()
+            # ret.target_image_mask = self.bridge.cv2_to_imgmsg(target_mask.astype(np.uint8), encoding="mono8")
             return ret
         else:
             # Deserialize the mask
