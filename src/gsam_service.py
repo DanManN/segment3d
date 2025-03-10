@@ -4,6 +4,7 @@ import copy
 import argparse
 import io
 import json
+import threading
 
 import cv2
 import numpy as np
@@ -22,6 +23,7 @@ from cv_bridge import CvBridge
 from geometry_msgs.msg import Pose
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo
+from sensor_msgs.msg import Image as Image_MSG
 from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse
 
 
@@ -73,9 +75,12 @@ def create_pcd(
 class SAMService:
 
     def __init__(self, args):
+        self.lock = threading.Lock()
         self.args = args
         self.detic_srv_name = 'detic_service'
         self.init_tracker_srv = rospy.Service(self.detic_srv_name, GetDeticResults, self.get_result)
+
+        rospy.Subscriber('/detic_topic', Image_MSG, self.send_img, queue_size=1)
 
         self.bridge = CvBridge()
         # self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
@@ -144,6 +149,33 @@ class SAMService:
 
         return plane_frame, inliers
 
+
+    def send_img(self, img_msg):
+        rgb_im = self.bridge.imgmsg_to_cv2(img_msg, 'rgb8')
+        image_pil = Image.fromarray(rgb_im)
+        print("Image Info:")
+        print(f"Format: {image_pil.format}")          # Image format (e.g., JPEG, PNG)
+        print(f"Size: {image_pil.size}")              # Image size (width, height)
+        print(f"Mode: {image_pil.mode}")              # Image mode (e.g., RGB, RGBA, L)
+        if image_pil.mode != "RGB":
+            image_pil = image_pil.convert("RGB")
+
+        bgr_im = cv2.cvtColor(rgb_im, cv2.COLOR_RGB2BGR)
+
+        send_string = ''
+        image_stream = io.BytesIO()
+        image_pil.save(image_stream, format="JPEG")  #Save image in JPEG format
+        image_data = image_stream.getvalue()  #Get byte data
+        #socket.send(image_data) #Send the serialized image
+
+        t0 = time.time()
+        message = [send_string.encode(), image_data]
+        with self.lock:
+            self.socket.send_multipart(message) #SENDING text and image
+            print("sent text and image data from gsam")
+            #To receive it blocks until it receives
+            message_parts = self.socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+
     def get_result(self, req: GetDeticResultsRequest):
         target_name = req.target_name.data
         print(f"{target_name = }")
@@ -181,11 +213,11 @@ class SAMService:
 
         t0 = time.time()
         message = [send_string.encode(), image_data]
-        self.socket.send_multipart(message) #SENDING text and image
-        print("sent text and image data from gsam")
-
-        #To receive it blocks until it receives
-        message_parts = self.socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+        with self.lock:
+            self.socket.send_multipart(message) #SENDING text and image
+            print("sent text and image data from gsam")
+            #To receive it blocks until it receives
+            message_parts = self.socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
         metadata = message_parts[0].decode()  # Decode as string
         metadata = json.loads(metadata)
         print(f"Received metadata from gsam server: {metadata}")
