@@ -169,7 +169,7 @@ class SAMService:
         #socket.send(image_data) #Send the serialized image
 
         t0 = time.time()
-        message = [send_string.encode(), image_data]
+        message = [send_string.encode(), image_data, False.to_bytes(length=1, byteorder='big')]
         with self.lock:
             self.socket.send_multipart(message) #SENDING text and image
             print("sent text and image data from gsam")
@@ -178,6 +178,7 @@ class SAMService:
 
     def get_result(self, req: GetDeticResultsRequest):
         target_name = req.target_name.data
+        ground = req.ground
         print(f"{target_name = }")
 
         camera_info = req.cam_info
@@ -212,7 +213,7 @@ class SAMService:
         #socket.send(image_data) #Send the serialized image
 
         t0 = time.time()
-        message = [send_string.encode(), image_data]
+        message = [send_string.encode(), image_data, ground.to_bytes(length=1, byteorder='big')]
         with self.lock:
             self.socket.send_multipart(message) #SENDING text and image
             print("sent text and image data from gsam")
