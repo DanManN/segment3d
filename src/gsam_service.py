@@ -184,9 +184,9 @@ class SAMService:
         camera_info = req.cam_info
         cam_intr = np.array(camera_info.K).reshape((3, 3))
         rgb_msg = req.color_img
-        depth_msg = req.depth_img
+        # depth_msg = req.depth_img
         rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
-        depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
+        # depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
         image_pil = Image.fromarray(rgb_im)
         print("Image Info:")
         print(f"Format: {image_pil.format}")          # Image format (e.g., JPEG, PNG)
@@ -198,8 +198,8 @@ class SAMService:
         if req.debug_mode:
             plt.imshow(rgb_im)
             plt.show()
-            plt.imshow(depth_im)
-            plt.show()
+            # plt.imshow(depth_im)
+            # plt.show()
 
         bgr_im = cv2.cvtColor(rgb_im, cv2.COLOR_RGB2BGR)
 
@@ -228,11 +228,11 @@ class SAMService:
             print("-----------No masks returned-------------")
             ret = GetDeticResultsResponse()
             ret.success = True
-            scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
-            scene_pts = np.asarray(scene_pcd.points)
-            scene_rgb = np.asarray(scene_pcd.colors)
-            ret.points = Float32MultiArray(data=scene_pts.flatten().tolist())
-            ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
+            # scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
+            # scene_pts = np.asarray(scene_pcd.points)
+            # scene_rgb = np.asarray(scene_pcd.colors)
+            # ret.points = Float32MultiArray(data=scene_pts.flatten().tolist())
+            # ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
             # ret.target_mask = target_mask_3d.flatten().tolist()
             # ret.background_mask = background_mask_3d.flatten().tolist()
             # ret.target_image_mask = self.bridge.cv2_to_imgmsg(target_mask.astype(np.uint8), encoding="mono8")
@@ -246,7 +246,7 @@ class SAMService:
         image_cv2 = np.array(image_pil)
         print("masks shape", masks.shape)
         #for mask in masks:
-        if True:
+        if req.debug_mode:
             mask = masks[0]
             mask = (mask > 0.5).astype(np.uint8)
             color = np.random.randint(0, 255, (3,), dtype=np.uint8)
@@ -255,44 +255,44 @@ class SAMService:
                 colored_mask[:, :, c] = mask * color[c]
             image_cv2 = cv2.bitwise_and(image_cv2, image_cv2, mask=1-mask)  # Keep original image where mask is 0
             image_cv2 = cv2.add(image_cv2, colored_mask)  # Add colored mask only where mask is 1
-        cv2.imwrite(f"/tmp/tmp_joe/gsamservice_output_{self.it}.jpg", image_cv2)
+            cv2.imwrite(f"/tmp/tmp_joe/gsamservice_output_{self.it}.jpg", image_cv2)
         self.it += 1
 
         #Choose one mask as the mask we are going to use, or aggregate all the masks together that we found. 
         #Is there a way to see the confidence for it?
         target_mask = masks[0]#np.asarray(masks[select_idx]) #Here is where we use the masks
 
-        scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
-        scene_pts = np.asarray(scene_pcd.points)
-        scene_rgb = np.asarray(scene_pcd.colors)
+        # scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
+        # scene_pts = np.asarray(scene_pcd.points)
+        # scene_rgb = np.asarray(scene_pcd.colors)
         # table_plane, table_indices = self.plane_detection_o3d(scene_pcd, inlier_thresh=0.01, visualize=req.debug_mode)
 
-        masked_depth_im = depth_im * target_mask
-        target_pcd = create_pcd(masked_depth_im, cam_intr, color_im=rgb_im)
+        # masked_depth_im = depth_im * target_mask
+        # target_pcd = create_pcd(masked_depth_im, cam_intr, color_im=rgb_im)
 
-        scene_kdtree = KDTree(scene_pts)
-        target_pts = np.asarray(target_pcd.points)
-        _, target_indices = scene_kdtree.query(target_pts)
-        target_mask_3d = np.zeros(scene_pts.shape[0], dtype=np.bool_)
-        target_mask_3d[target_indices] = True
+        # scene_kdtree = KDTree(scene_pts)
+        # target_pts = np.asarray(target_pcd.points)
+        # _, target_indices = scene_kdtree.query(target_pts)
+        # target_mask_3d = np.zeros(scene_pts.shape[0], dtype=np.bool_)
+        # target_mask_3d[target_indices] = True
 
         # background_mask_3d = np.ones(scene_pts.shape[0], dtype=np.bool_)
         # background_mask_3d[table_indices] = False
         # background_mask_3d[target_indices] = False
 
-        if req.debug_mode:
-            pcd_vis = copy.deepcopy(scene_pcd)
-            pcd_colors = np.asarray(pcd_vis.colors)
-            pcd_colors[target_mask_3d] = (1, 0, 0)
-            # pcd_colors[background_mask_3d] = (0, 0, 1)
-            o3d.visualization.draw_geometries([pcd_vis])
+        # if req.debug_mode:
+        #     pcd_vis = copy.deepcopy(scene_pcd)
+        #     pcd_colors = np.asarray(pcd_vis.colors)
+        #     pcd_colors[target_mask_3d] = (1, 0, 0)
+        #     # pcd_colors[background_mask_3d] = (0, 0, 1)
+        #     o3d.visualization.draw_geometries([pcd_vis])
 
         ret = GetDeticResultsResponse()
         ret.success = True
         # ret.pose = pose_msg  # this one is not used
-        ret.points = Float32MultiArray(data=scene_pts.flatten().tolist())
-        ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
-        ret.target_mask = target_mask_3d.flatten().tolist()
+        # ret.points = Float32MultiArray(data=scene_pts.flatten().tolist())
+        # ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
+        # ret.target_mask = target_mask_3d.flatten().tolist()
         # ret.background_mask = background_mask_3d.flatten().tolist()
         ret.target_image_mask = self.bridge.cv2_to_imgmsg(target_mask.astype(np.uint8), encoding="mono8")
         return ret
