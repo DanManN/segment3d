@@ -120,6 +120,8 @@ def send_one(image, send_string, socket, do_not_track=0, boxes_use=False):
     # Deserialize the mask
     masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(metadata["shape"])
 
+    max_index = int(message_parts[2].decode('utf-8'))
+
     #Boxes
     if boxes_use == True:
         box_metadata = json.loads(message_parts[2].decode())
@@ -127,7 +129,7 @@ def send_one(image, send_string, socket, do_not_track=0, boxes_use=False):
         boxes = np.frombuffer(box_bytes, dtype=box_metadata["dtype"]).reshape(box_metadata["shape"]) #[x0, y0, x1, y1] format
         return masks, boxes
     else:
-        return masks
+        return masks, max_index
 
 def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
     """
@@ -142,6 +144,8 @@ def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
 
     return encoded_instance_mask = [masks] of 32bit values
     """
+    if target_mask.ndim >= 3:
+        target_mask = target_mask[0]
     encoded_instance_mask = np.zeros((instance_mask.shape[1], instance_mask.shape[2]), dtype=np.uint32) #[height, width]
     for i in range(instance_mask.shape[0]):
         encoded_instance_mask |= (instance_mask[i].astype(np.uint32) << (i+1))
@@ -150,9 +154,10 @@ def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
     return encoded_instance_mask
 
 def send_instance_and_target(img, tar_string, socket):
-    mask_instance = send_one(img, "Object.", socket, do_not_track=True)
-    mask_target = send_one(img, tar_string, socket, do_not_track=True)
-    mask_instance = remove_target_mask(mask_instance, mask_target)
+    mask_instance, _ = send_one(img, "Object.", socket, do_not_track=True)
+    mask_target, max_index = send_one(img, tar_string, socket, do_not_track=True)
+    print("mask target shape", mask_target.shape, max_index)
+    mask_instance = remove_target_mask(mask_instance, np.expand_dims(mask_target[max_index], axis=0))
     encoded_instance_mask = instance_and_target_masks_to_one_mask(mask_instance, mask_target)
     return mask_instance, mask_target, encoded_instance_mask
 
