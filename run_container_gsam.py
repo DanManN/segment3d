@@ -28,13 +28,11 @@ if __name__ == "__main__":
         docker run \
             --gpus all --rm -it -p 8091:8091 --net=host \
             -e DISPLAY=${{DISPLAY}} -v /tmp:/tmp \
-            -v $(rospack find segment3d)/cache:/root/.cache \
-            -v $(rospack find segment3d)/Grounded-SAM-2-iterative:/home/appuser/Grounded-SAM-2 \
-            groundedsam:stream \
+            groundedsam:latest \
             /bin/bash -i -c \
             "source ~/.bashrc; \
             export ROS_IP={ip}; export ROS_MASTER={host}; export ROS_MASTER_URI=http://{host}:11311; \
-            python server_gsam.py"
+	    python server_gsam.py"
             """.format(
         ip=os.environ['ROS_IP'] if 'ROS_IP' in os.environ else '127.0.0.1',
         host=args.host,
@@ -42,3 +40,7 @@ if __name__ == "__main__":
     #roslaunch segment3d segment3d_sam.launch TODO:=todo"
     print(docker_run_command)
     subprocess.call(docker_run_command, shell=True)
+
+#-v $(rospack find segment3d)/Grounded-SAM-2-iterative:/home/appuser/Grounded-SAM-2 \
+#-v $(rospack find segment3d)/cache:/root/.cache \
+#These are for if you have the working version as the repo you have not on the docker

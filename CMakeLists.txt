@@ -27,6 +27,7 @@ add_service_files(
   FILES
   Segment3D.srv
   GetDeticResults.srv
+  GetGSAMResults.srv
 )
 
 ## Generate actions in the 'action' folder

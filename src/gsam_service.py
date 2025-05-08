@@ -24,7 +24,7 @@ from geometry_msgs.msg import Pose
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo
 from sensor_msgs.msg import Image as Image_MSG
-from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse
+from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse, GetGSAMResults, GetGSAMResultsRequest, GetGSAMResultsResponse
 
 
 
@@ -70,7 +70,91 @@ def create_pcd(
         )
     return pcd
 
+def remove_target_mask(instance_masks, target_mask, threshold=0.9):
+    """
+    Removes any mask in instance_masks that overlaps with the target_mask 
+    by >= threshold (default 90%).
 
+    Parameters:
+    - instance_masks: np.ndarray of shape [num_masks, height, width]
+                      Binary masks for each instance.
+    - target_mask: np.ndarray of shape [height, width]
+                   Binary mask to compare against.
+    - threshold: float, overlap ratio to trigger removal.
+
+    Returns:
+    - np.ndarray: Filtered instance_masks with overlapping masks removed.
+    """
+    keep_masks = []
+    target_area = np.sum(target_mask)
+
+    for mask in instance_masks:
+        intersection = np.sum(mask * target_mask)
+        overlap_ratio = intersection / target_area if target_area > 0 else 0
+
+        if overlap_ratio < threshold:
+            keep_masks.append(mask)
+
+    return np.stack(keep_masks) if keep_masks else np.zeros((0, *target_mask.shape), dtype=instance_masks.dtype)
+
+def send_one(image, send_string, socket, do_not_track=0, boxes_use=False):
+    #image = Image.open(image_path)
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+    image_stream = io.BytesIO()
+    image.save(image_stream, format="JPEG")  #Save image in JPEG format
+    image_data = image_stream.getvalue()  #Get byte data
+    #socket.send(image_data) #Send the serialized image
+
+    message = [send_string.encode(), image_data, do_not_track.to_bytes(length=1, byteorder='big')]
+    socket.send_multipart(message) #SENDING text and image
+    print("sent")
+
+    #To receive it blocks until it receives
+    message_parts = socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+    metadata = message_parts[0].decode()  # Decode as string
+    metadata = json.loads(metadata)
+    print(f"Received metadata: {metadata}")
+    #Bytes
+    mask_bytes = message_parts[1]
+    # Deserialize the mask
+    masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(metadata["shape"])
+
+    #Boxes
+    if boxes_use == True:
+        box_metadata = json.loads(message_parts[2].decode())
+        box_bytes = message_parts[3]
+        boxes = np.frombuffer(box_bytes, dtype=box_metadata["dtype"]).reshape(box_metadata["shape"]) #[x0, y0, x1, y1] format
+        return masks, boxes
+    else:
+        return masks
+
+def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
+    """
+    instance_mask = [masks, height, width] bool values numpy
+    target_mask = [height, width] bool values
+
+    For each masks value, put it as the corresponding bit of a [height, width] as 1
+    All values at mask0 move 0+1
+    All values at mask1 move 1+1
+    etc
+    Keep the first as the target value
+
+    return encoded_instance_mask = [masks] of 32bit values
+    """
+    encoded_instance_mask = np.zeros((instance_mask.shape[1], instance_mask.shape[2]), dtype=np.uint32) #[height, width]
+    for i in range(instance_mask.shape[0]):
+        encoded_instance_mask |= (instance_mask[i].astype(np.uint32) << (i+1))
+    encoded_instance_mask |= (target_mask.astype(np.uint32))
+
+    return encoded_instance_mask
+
+def send_instance_and_target(img, tar_string, socket):
+    mask_instance = send_one(img, "Object.", socket, do_not_track=True)
+    mask_target = send_one(img, tar_string, socket, do_not_track=True)
+    mask_instance = remove_target_mask(mask_instance, mask_target)
+    encoded_instance_mask = instance_and_target_masks_to_one_mask(mask_instance, mask_target)
+    return mask_instance, mask_target, encoded_instance_mask
 
 class SAMService:
 
@@ -78,9 +162,9 @@ class SAMService:
         self.lock = threading.Lock()
         self.args = args
         self.detic_srv_name = 'detic_service'
-        self.init_tracker_srv = rospy.Service(self.detic_srv_name, GetDeticResults, self.get_result)
+        self.init_tracker_srv = rospy.Service(self.detic_srv_name, GetGSAMResults, self.get_result_instance_and_target)
 
-        rospy.Subscriber('/detic_topic', Image_MSG, self.send_img, queue_size=1)
+        #rospy.Subscriber('/detic_topic', Image_MSG, self.send_img, queue_size=1)
 
         self.bridge = CvBridge()
         # self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
@@ -175,6 +259,35 @@ class SAMService:
             print("sent text and image data from gsam")
             #To receive it blocks until it receives
             message_parts = self.socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+
+    def get_result_instance_and_target(self, req: GetGSAMResultsRequest):
+        target_name = req.target_name.data
+        #ground = req.ground
+        print(f"{target_name = }")
+
+        camera_info = req.cam_info
+        #cam_intr = np.array(camera_info.K).reshape((3, 3))
+        rgb_msg = req.color_img
+        # depth_msg = req.depth_img
+        rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
+        # depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
+        image_pil = Image.fromarray(rgb_im)
+        print("Image Info:")
+        print(f"Format: {image_pil.format}")          # Image format (e.g., JPEG, PNG)
+        print(f"Size: {image_pil.size}")              # Image size (width, height)
+        print(f"Mode: {image_pil.mode}")              # Image mode (e.g., RGB, RGBA, L)
+        if image_pil.mode != "RGB":
+            image_pil = image_pil.convert("RGB")
+
+        _, _, encoded_masks = send_instance_and_target(image_pil, target_name, self.socket)
+
+        #target_mask = masks[0]#np.asarray(masks[select_idx]) #Here is where we use the masks
+
+        ret = GetGSAMResultsResponse()
+        ret.success = True
+        ret.encoded_masks = encoded_masks.flatten().tolist()
+        #Afterwards this is fused just using or. Then the occlusion masks from a given segmentation can be given the bit id that caused that occlusion to use to make the dependency graph.
+        return ret
 
     def get_result(self, req: GetDeticResultsRequest):
         target_name = req.target_name.data
