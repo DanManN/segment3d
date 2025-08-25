@@ -5,6 +5,7 @@ import argparse
 import io
 import json
 import threading
+import random
 
 import cv2
 import numpy as np
@@ -26,6 +27,60 @@ from sensor_msgs.msg import CameraInfo
 from sensor_msgs.msg import Image as Image_MSG
 from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse, GetGSAMResults, GetGSAMResultsRequest, GetGSAMResultsResponse
 
+def make_seg_img(masks, img, tag=0, boxes=None):
+    img = np.array(img)
+    overlay = np.zeros_like(img, dtype=np.uint8)
+    i = -1
+    for mask in masks:
+        i += 1
+        mask = (mask > 0.5).astype(np.uint8)
+        bold_colors = [
+            (255, 0, 0),      # Red
+            (0, 255, 0),      # Green
+            (0, 0, 255),      # Blue
+            (255, 255, 0),    # Yellow
+            (255, 0, 255),    # Magenta
+            (0, 255, 255),    # Cyan
+            (255, 128, 0),    # Orange
+            (128, 0, 255),    # Purple
+            (0, 128, 255),    # Light Blue
+            (128, 255, 0),    # Lime
+            #(255, 0, 128),    # Pink
+        ]
+        color = np.array(random.choice(bold_colors), dtype=np.uint8)
+
+        if i < len(bold_colors):
+            color = np.array(bold_colors[i], dtype=np.uint8)
+        else:
+            color = tuple(np.random.randint(0, 256, size=3).tolist())
+            color = np.array(color, dtype=np.uint8)
+        #if i >= len(masks) - 1:
+        #    print("Pink color")
+        #    color = np.array((255, 0, 128), dtype=np.uint8) #Pink
+        colored_mask = np.zeros_like(img, dtype=np.uint8)
+
+        for c in range(3):
+            colored_mask[:, :, c] = mask * color[c]
+
+        overlay = np.where(mask[..., None], overlay + colored_mask, overlay)
+        cv2.imshow(f"Overlay Image {i}", overlay)
+
+        if boxes is not None:
+            for box in boxes:
+                x0, y0, x1, y1 = map(int, box)
+                cv2.rectangle(overlay, (x0, y0), (x1, y1), color=(0, 0, 0), thickness=2)
+
+    # Clip values to avoid overflow after summation
+    overlay = np.clip(overlay, 0, 255)
+
+    # Blend once at the end
+    blended = cv2.addWeighted(img, 0.5, overlay, 0.5, 0)
+
+    # cv2.imwrite(f"./result_images/outputfromclient_{tag}.jpg", blended)
+    cv2.imshow("Segmented Image", blended)
+    cv2.imshow("Overlay Image", overlay)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
 def main():
@@ -115,6 +170,8 @@ def send_one(image, send_string, socket, do_not_track=0, boxes_use=False):
     metadata = message_parts[0].decode()  # Decode as string
     metadata = json.loads(metadata)
     print(f"Received metadata: {metadata}")
+    if metadata['dtype'] is None:
+        return None, None
     #Bytes
     mask_bytes = message_parts[1]
     # Deserialize the mask
@@ -156,8 +213,13 @@ def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
 def send_instance_and_target(img, tar_string, socket):
     mask_instance, _ = send_one(img, "Object.", socket, do_not_track=True)
     mask_target, max_index = send_one(img, tar_string, socket, do_not_track=True)
-    print("mask target shape", mask_target.shape, max_index)
-    mask_instance = remove_target_mask(mask_instance, np.expand_dims(mask_target[max_index], axis=0))
+    if mask_target is not None:
+        print("mask target shape", mask_target.shape, max_index)
+        mask_instance = remove_target_mask(mask_instance, np.expand_dims(mask_target[max_index], axis=0))
+    else:
+        print("No target mask found")
+        mask_target = np.zeros((1, img.height, img.width), dtype=bool)
+    # make_seg_img(mask_instance, img)
     encoded_instance_mask = instance_and_target_masks_to_one_mask(mask_instance, mask_target)
     return mask_instance, mask_target, encoded_instance_mask
 
