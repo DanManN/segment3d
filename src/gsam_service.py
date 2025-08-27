@@ -152,6 +152,34 @@ def remove_target_mask(instance_masks, target_mask, threshold=0.9):
 
     return np.stack(keep_masks) if keep_masks else np.zeros((0, *target_mask.shape), dtype=instance_masks.dtype)
 
+def remove_overlapping_masks(instance_masks):
+    """
+    Removes any mask in instance_masks that contains a mask inside of it
+
+    Parameters:
+    - instance_masks: np.ndarray of shape [num_masks, height, width]
+                      Binary masks for each instance.
+    Returns:
+    - np.ndarray: Filtered instance_masks with overlapping outer masks that have masks inside of it moved to not be included
+    """
+    keep_masks = []
+
+    for mask_outer in instance_masks:
+        overlapped = False
+        for mask_inner in instance_masks:
+            mask_inner_area = np.sum(mask_inner) #If target area is fully matching it then the overlap will be the same as the sum and the outer mask should delete
+            intersection = np.sum(mask_outer * mask_inner)
+            overlap_ratio = intersection / mask_inner_area if mask_inner_area > 0 else 0
+
+            if overlap_ratio == 1.0: #If it has the inner mask fully overlapped inside of it
+                overlapped = True
+                break
+        
+        if overlapped:
+            keep_masks.append(mask_outer)
+
+    return np.stack(keep_masks) if keep_masks else np.zeros((0, *instance_masks[0].shape), dtype=instance_masks.dtype)
+
 def send_one(image, send_string, socket, do_not_track=0, boxes_use=False):
     #image = Image.open(image_path)
     if image.mode == 'RGBA':
@@ -215,6 +243,7 @@ def send_instance_and_target(img, tar_string, socket):
     mask_target, max_index = send_one(img, tar_string, socket, do_not_track=True)
     if mask_target is not None:
         print("mask target shape", mask_target.shape, max_index)
+        mask_instance = remove_overlapping_masks(mask_instance)
         mask_instance = remove_target_mask(mask_instance, np.expand_dims(mask_target[max_index], axis=0))
     else:
         print("No target mask found")
