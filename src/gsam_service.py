@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 import zmq
 import time
 
-#from lang_sam import LangSAM
+# from lang_sam import LangSAM
 
 # ROS library
 import rospy
@@ -25,7 +25,15 @@ from geometry_msgs.msg import Pose
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo
 from sensor_msgs.msg import Image as Image_MSG
-from segment3d.srv import GetDeticResults, GetDeticResultsRequest, GetDeticResultsResponse, GetGSAMResults, GetGSAMResultsRequest, GetGSAMResultsResponse
+from segment3d.srv import (
+    GetDeticResults,
+    GetDeticResultsRequest,
+    GetDeticResultsResponse,
+    GetGSAMResults,
+    GetGSAMResultsRequest,
+    GetGSAMResultsResponse,
+)
+
 
 def make_seg_img(masks, img, tag=0, boxes=None):
     img = np.array(img)
@@ -35,17 +43,17 @@ def make_seg_img(masks, img, tag=0, boxes=None):
         i += 1
         mask = (mask > 0.5).astype(np.uint8)
         bold_colors = [
-            (255, 0, 0),      # Red
-            (0, 255, 0),      # Green
-            (0, 0, 255),      # Blue
-            (255, 255, 0),    # Yellow
-            (255, 0, 255),    # Magenta
-            (0, 255, 255),    # Cyan
-            (255, 128, 0),    # Orange
-            (128, 0, 255),    # Purple
-            (0, 128, 255),    # Light Blue
-            (128, 255, 0),    # Lime
-            #(255, 0, 128),    # Pink
+            (255, 0, 0),  # Red
+            (0, 255, 0),  # Green
+            (0, 0, 255),  # Blue
+            (255, 255, 0),  # Yellow
+            (255, 0, 255),  # Magenta
+            (0, 255, 255),  # Cyan
+            (255, 128, 0),  # Orange
+            (128, 0, 255),  # Purple
+            (0, 128, 255),  # Light Blue
+            (128, 255, 0),  # Lime
+            # (255, 0, 128),    # Pink
         ]
         color = np.array(random.choice(bold_colors), dtype=np.uint8)
 
@@ -54,7 +62,7 @@ def make_seg_img(masks, img, tag=0, boxes=None):
         else:
             color = tuple(np.random.randint(0, 256, size=3).tolist())
             color = np.array(color, dtype=np.uint8)
-        #if i >= len(masks) - 1:
+        # if i >= len(masks) - 1:
         #    print("Pink color")
         #    color = np.array((255, 0, 128), dtype=np.uint8) #Pink
         colored_mask = np.zeros_like(img, dtype=np.uint8)
@@ -85,8 +93,8 @@ def make_seg_img(masks, img, tag=0, boxes=None):
 
 def main():
     print("Service starting")
-    rospy.init_node('detic_service', log_level=rospy.DEBUG)
-    #rospy.init_node('test', log_level=rospy.DEBUG)
+    rospy.init_node("detic_service", log_level=rospy.DEBUG)
+    # rospy.init_node('test', log_level=rospy.DEBUG)
     print("Node initialized")
 
     parser = argparse.ArgumentParser(description="SAM")
@@ -98,12 +106,11 @@ def main():
     rospy.spin()
 
 
-
 def create_pcd(
     depth_im: np.ndarray,
     cam_intr: np.ndarray,
     color_im: np.ndarray = None,
-    cam_extr: np.ndarray = np.eye(4)
+    cam_extr: np.ndarray = np.eye(4),
 ):
     intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic()
     intrinsic_o3d.intrinsic_matrix = cam_intr
@@ -111,10 +118,7 @@ def create_pcd(
     if color_im is not None:
         color_im_o3d = o3d.geometry.Image(color_im)
         rgbd = o3d.geometry.RGBDImage().create_from_color_and_depth(
-            color_im_o3d,
-            depth_im_o3d,
-            depth_scale=1,
-            convert_rgb_to_intensity=False
+            color_im_o3d, depth_im_o3d, depth_scale=1, convert_rgb_to_intensity=False
         )
         pcd = o3d.geometry.PointCloud().create_from_rgbd_image(
             rgbd, intrinsic_o3d, extrinsic=cam_extr
@@ -125,9 +129,10 @@ def create_pcd(
         )
     return pcd
 
+
 def remove_target_mask(instance_masks, target_mask, threshold=0.9):
     """
-    Removes any mask in instance_masks that overlaps with the target_mask 
+    Removes any mask in instance_masks that overlaps with the target_mask
     by >= threshold (default 90%).
 
     Parameters:
@@ -150,7 +155,12 @@ def remove_target_mask(instance_masks, target_mask, threshold=0.9):
         if overlap_ratio < threshold:
             keep_masks.append(mask)
 
-    return np.stack(keep_masks) if keep_masks else np.zeros((0, *target_mask.shape), dtype=instance_masks.dtype)
+    return (
+        np.stack(keep_masks)
+        if keep_masks
+        else np.zeros((0, *target_mask.shape), dtype=instance_masks.dtype)
+    )
+
 
 def remove_overlapping_masks(instance_masks):
     """
@@ -164,57 +174,86 @@ def remove_overlapping_masks(instance_masks):
     """
     keep_masks = []
 
-    for mask_outer in instance_masks:
+    for i in range(len(instance_masks)):
+        mask_outer = instance_masks[i]
         overlapped = False
-        for mask_inner in instance_masks:
-            mask_inner_area = np.sum(mask_inner) #If target area is fully matching it then the overlap will be the same as the sum and the outer mask should delete
+        for n in range(len(instance_masks)):
+            mask_inner = instance_masks[n]
+            mask_inner_area = np.sum(
+                mask_inner
+            )  # If target area is fully matching it then the overlap will be the same as the sum and the outer mask should delete
             intersection = np.sum(mask_outer * mask_inner)
             overlap_ratio = intersection / mask_inner_area if mask_inner_area > 0 else 0
 
-            if overlap_ratio == 1.0: #If it has the inner mask fully overlapped inside of it
+            print("Overlap ratio", overlap_ratio)
+            if (
+                overlap_ratio >= 0.95 and i != n
+            ):  # If it has the inner mask fully overlapped inside of it, then don't keep it
+                print("Overlapped")
                 overlapped = True
                 break
-        
-        if overlapped:
+
+        if (
+            not overlapped
+        ):  # If this mask for these checks has no masks entirely inside of it
+            print("not overlapped", len(keep_masks))
             keep_masks.append(mask_outer)
 
-    return np.stack(keep_masks) if keep_masks else np.zeros((0, *instance_masks[0].shape), dtype=instance_masks.dtype)
+    out = (
+        np.stack(keep_masks)
+        if keep_masks
+        else np.zeros((0, *instance_masks[0].shape), dtype=instance_masks.dtype)
+    )
+    print(out.shape)
+    return out
+
 
 def send_one(image, send_string, socket, do_not_track=0, boxes_use=False):
-    #image = Image.open(image_path)
-    if image.mode == 'RGBA':
-        image = image.convert('RGB')
+    # image = Image.open(image_path)
+    if image.mode == "RGBA":
+        image = image.convert("RGB")
     image_stream = io.BytesIO()
-    image.save(image_stream, format="JPEG")  #Save image in JPEG format
-    image_data = image_stream.getvalue()  #Get byte data
-    #socket.send(image_data) #Send the serialized image
+    image.save(image_stream, format="JPEG")  # Save image in JPEG format
+    image_data = image_stream.getvalue()  # Get byte data
+    # socket.send(image_data) #Send the serialized image
 
-    message = [send_string.encode(), image_data, do_not_track.to_bytes(length=1, byteorder='big')]
-    socket.send_multipart(message) #SENDING text and image
+    message = [
+        send_string.encode(),
+        image_data,
+        do_not_track.to_bytes(length=1, byteorder="big"),
+    ]
+    socket.send_multipart(message)  # SENDING text and image
     print("sent")
 
-    #To receive it blocks until it receives
-    message_parts = socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+    # To receive it blocks until it receives
+    message_parts = (
+        socket.recv_multipart()
+    )  # RECEIVING metadata for masks and mask bytes
     metadata = message_parts[0].decode()  # Decode as string
     metadata = json.loads(metadata)
     print(f"Received metadata: {metadata}")
-    if metadata['dtype'] is None:
+    if metadata["dtype"] is None:
         return None, None
-    #Bytes
+    # Bytes
     mask_bytes = message_parts[1]
     # Deserialize the mask
-    masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(metadata["shape"])
+    masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(
+        metadata["shape"]
+    )
 
-    max_index = int(message_parts[2].decode('utf-8'))
+    max_index = int(message_parts[2].decode("utf-8"))
 
-    #Boxes
+    # Boxes
     if boxes_use == True:
         box_metadata = json.loads(message_parts[2].decode())
         box_bytes = message_parts[3]
-        boxes = np.frombuffer(box_bytes, dtype=box_metadata["dtype"]).reshape(box_metadata["shape"]) #[x0, y0, x1, y1] format
+        boxes = np.frombuffer(box_bytes, dtype=box_metadata["dtype"]).reshape(
+            box_metadata["shape"]
+        )  # [x0, y0, x1, y1] format
         return masks, boxes
     else:
         return masks, max_index
+
 
 def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
     """
@@ -231,12 +270,15 @@ def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
     """
     if target_mask.ndim >= 3:
         target_mask = target_mask[0]
-    encoded_instance_mask = np.zeros((instance_mask.shape[1], instance_mask.shape[2]), dtype=np.uint32) #[height, width]
+    encoded_instance_mask = np.zeros(
+        (instance_mask.shape[1], instance_mask.shape[2]), dtype=np.uint32
+    )  # [height, width]
     for i in range(instance_mask.shape[0]):
-        encoded_instance_mask |= (instance_mask[i].astype(np.uint32) << (i+1))
-    encoded_instance_mask |= (target_mask.astype(np.uint32))
+        encoded_instance_mask |= instance_mask[i].astype(np.uint32) << (i + 1)
+    encoded_instance_mask |= target_mask.astype(np.uint32)
 
     return encoded_instance_mask
+
 
 def send_instance_and_target(img, tar_string, socket):
     mask_instance, _ = send_one(img, "Object.", socket, do_not_track=True)
@@ -244,35 +286,43 @@ def send_instance_and_target(img, tar_string, socket):
     if mask_target is not None:
         print("mask target shape", mask_target.shape, max_index)
         mask_instance = remove_overlapping_masks(mask_instance)
-        mask_instance = remove_target_mask(mask_instance, np.expand_dims(mask_target[max_index], axis=0))
+        mask_instance = remove_target_mask(
+            mask_instance, np.expand_dims(mask_target[max_index], axis=0)
+        )
     else:
         print("No target mask found")
         mask_target = np.zeros((1, img.height, img.width), dtype=bool)
     # make_seg_img(mask_instance, img)
-    encoded_instance_mask = instance_and_target_masks_to_one_mask(mask_instance, mask_target)
+    encoded_instance_mask = instance_and_target_masks_to_one_mask(
+        mask_instance, mask_target
+    )
     return mask_instance, mask_target, encoded_instance_mask
+
 
 class SAMService:
 
     def __init__(self, args):
         self.lock = threading.Lock()
         self.args = args
-        self.detic_srv_name = 'detic_service'
-        self.init_tracker_srv = rospy.Service(self.detic_srv_name, GetGSAMResults, self.get_result_instance_and_target)
+        self.detic_srv_name = "detic_service"
+        self.init_tracker_srv = rospy.Service(
+            self.detic_srv_name, GetGSAMResults, self.get_result_instance_and_target
+        )
 
-        #rospy.Subscriber('/detic_topic', Image_MSG, self.send_img, queue_size=1)
+        # rospy.Subscriber('/detic_topic', Image_MSG, self.send_img, queue_size=1)
 
         self.bridge = CvBridge()
         # self.model = LangSAM('vit_b')  #,'./sam_vit_b_01ec64.pth')
-        #print("before choosing model")
-        #self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
-        
-        #Create the zmq socket
+        # print("before choosing model")
+        # self.model = LangSAM()  #,'./sam_vit_b_01ec64.pth')
+
+        # Create the zmq socket
         self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ) #Make sure to use REQ
+        self.socket = self.context.socket(zmq.REQ)  # Make sure to use REQ
         print("trying to connect to server gsam port")
-        #socket.connect("tcp://:8091")
-        self.socket.connect("tcp://0.0.0.0:8091")
+        # socket.connect("tcp://:8091")
+        # self.socket.connect("tcp://0.0.0.0:8091")
+        self.socket.connect("tcp://172.16.71.50:9080")
         print("Client connected")
         self.it = 0
 
@@ -283,15 +333,17 @@ class SAMService:
         return mesh.transform(T)
 
     @staticmethod
-    def plane_detection_o3d(pcd: o3d.geometry.PointCloud,
-                            inlier_thresh: float,
-                            max_iterations: int = 1000,
-                            visualize: bool = False,
-                            in_cam_frame: bool = True):
+    def plane_detection_o3d(
+        pcd: o3d.geometry.PointCloud,
+        inlier_thresh: float,
+        max_iterations: int = 1000,
+        visualize: bool = False,
+        in_cam_frame: bool = True,
+    ):
         # http://www.open3d.org/docs/release/tutorial/geometry/pointcloud.html#Plane-segmentation
-        plane_model, inliers = pcd.segment_plane(distance_threshold=inlier_thresh,
-                                                ransac_n=3,
-                                                num_iterations=max_iterations)
+        plane_model, inliers = pcd.segment_plane(
+            distance_threshold=inlier_thresh, ransac_n=3, num_iterations=max_iterations
+        )
         [a, b, c, d] = plane_model  # ax + by + cz + d = 0
         inlier_cloud = pcd.select_by_index(inliers)
         inlier_cloud.paint_uniform_color([1, 0, 0])
@@ -299,7 +351,7 @@ class SAMService:
 
         # sample the inlier point that is closest to the camera origin as the world origin
         inlier_pts = np.asarray(inlier_cloud.points)
-        squared_distances = np.sum(inlier_pts ** 2, axis=1)
+        squared_distances = np.sum(inlier_pts**2, axis=1)
         closest_index = np.argmin(squared_distances)
         x, y, z = inlier_pts[closest_index]
         origin = np.array([x, y, (-d - a * x - b * y) / (c + 1e-12)])
@@ -322,67 +374,74 @@ class SAMService:
         plane_frame[:3, 2] = plane_normal
         plane_frame[:3, 3] = origin
 
-        #if visualize:
+        # if visualize:
         #    plane_frame_vis = DeticService.generate_coordinate_frame(plane_frame, scale=0.05)
         #    cam_frame_vis = DeticService.generate_coordinate_frame(np.eye(4), scale=0.05)
         #    o3d.visualization.draw_geometries([inlier_cloud, outlier_cloud, plane_frame_vis, cam_frame_vis])
 
         return plane_frame, inliers
 
-
     def send_img(self, img_msg):
-        rgb_im = self.bridge.imgmsg_to_cv2(img_msg, 'rgb8')
+        rgb_im = self.bridge.imgmsg_to_cv2(img_msg, "rgb8")
         image_pil = Image.fromarray(rgb_im)
         print("Image Info:")
-        print(f"Format: {image_pil.format}")          # Image format (e.g., JPEG, PNG)
-        print(f"Size: {image_pil.size}")              # Image size (width, height)
-        print(f"Mode: {image_pil.mode}")              # Image mode (e.g., RGB, RGBA, L)
+        print(f"Format: {image_pil.format}")  # Image format (e.g., JPEG, PNG)
+        print(f"Size: {image_pil.size}")  # Image size (width, height)
+        print(f"Mode: {image_pil.mode}")  # Image mode (e.g., RGB, RGBA, L)
         if image_pil.mode != "RGB":
             image_pil = image_pil.convert("RGB")
 
         bgr_im = cv2.cvtColor(rgb_im, cv2.COLOR_RGB2BGR)
 
-        send_string = ''
+        send_string = ""
         image_stream = io.BytesIO()
-        image_pil.save(image_stream, format="JPEG")  #Save image in JPEG format
-        image_data = image_stream.getvalue()  #Get byte data
-        #socket.send(image_data) #Send the serialized image
+        image_pil.save(image_stream, format="JPEG")  # Save image in JPEG format
+        image_data = image_stream.getvalue()  # Get byte data
+        # socket.send(image_data) #Send the serialized image
 
         t0 = time.time()
-        message = [send_string.encode(), image_data, False.to_bytes(length=1, byteorder='big')]
+        message = [
+            send_string.encode(),
+            image_data,
+            False.to_bytes(length=1, byteorder="big"),
+        ]
         with self.lock:
-            self.socket.send_multipart(message) #SENDING text and image
+            self.socket.send_multipart(message)  # SENDING text and image
             print("sent text and image data from gsam")
-            #To receive it blocks until it receives
-            message_parts = self.socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+            # To receive it blocks until it receives
+            message_parts = (
+                self.socket.recv_multipart()
+            )  # RECEIVING metadata for masks and mask bytes
 
     def get_result_instance_and_target(self, req: GetGSAMResultsRequest):
         target_name = req.target_name.data
-        #ground = req.ground
+        # ground = req.ground
         print(f"{target_name = }")
 
         camera_info = req.cam_info
-        #cam_intr = np.array(camera_info.K).reshape((3, 3))
+        # cam_intr = np.array(camera_info.K).reshape((3, 3))
         rgb_msg = req.color_img
         # depth_msg = req.depth_img
-        rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
+        rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, "rgb8")
         # depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
         image_pil = Image.fromarray(rgb_im)
         print("Image Info:")
-        print(f"Format: {image_pil.format}")          # Image format (e.g., JPEG, PNG)
-        print(f"Size: {image_pil.size}")              # Image size (width, height)
-        print(f"Mode: {image_pil.mode}")              # Image mode (e.g., RGB, RGBA, L)
+        print(f"Format: {image_pil.format}")  # Image format (e.g., JPEG, PNG)
+        print(f"Size: {image_pil.size}")  # Image size (width, height)
+        print(f"Mode: {image_pil.mode}")  # Image mode (e.g., RGB, RGBA, L)
         if image_pil.mode != "RGB":
             image_pil = image_pil.convert("RGB")
 
-        _, _, encoded_masks = send_instance_and_target(image_pil, target_name, self.socket)
+        _, _, encoded_masks = send_instance_and_target(
+            image_pil, target_name, self.socket
+        )
 
-        #target_mask = masks[0]#np.asarray(masks[select_idx]) #Here is where we use the masks
+        # target_mask = masks[0]#np.asarray(masks[select_idx]) #Here is where we use the masks
 
         ret = GetGSAMResultsResponse()
         ret.success = True
         ret.encoded_masks = encoded_masks.flatten().tolist()
-        #Afterwards this is fused just using or. Then the occlusion masks from a given segmentation can be given the bit id that caused that occlusion to use to make the dependency graph.
+        # Afterwards this is fused just using or. Then the occlusion masks from a given segmentation can be given the bit id that caused that occlusion to use to make the dependency graph.
         return ret
 
     def get_result(self, req: GetDeticResultsRequest):
@@ -394,13 +453,13 @@ class SAMService:
         cam_intr = np.array(camera_info.K).reshape((3, 3))
         rgb_msg = req.color_img
         # depth_msg = req.depth_img
-        rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, 'rgb8')
+        rgb_im = self.bridge.imgmsg_to_cv2(rgb_msg, "rgb8")
         # depth_im = self.bridge.imgmsg_to_cv2(depth_msg, '32FC1').astype(np.float32) / self.args.depth_scale
         image_pil = Image.fromarray(rgb_im)
         print("Image Info:")
-        print(f"Format: {image_pil.format}")          # Image format (e.g., JPEG, PNG)
-        print(f"Size: {image_pil.size}")              # Image size (width, height)
-        print(f"Mode: {image_pil.mode}")              # Image mode (e.g., RGB, RGBA, L)
+        print(f"Format: {image_pil.format}")  # Image format (e.g., JPEG, PNG)
+        print(f"Size: {image_pil.size}")  # Image size (width, height)
+        print(f"Mode: {image_pil.mode}")  # Image mode (e.g., RGB, RGBA, L)
         if image_pil.mode != "RGB":
             image_pil = image_pil.convert("RGB")
 
@@ -412,28 +471,36 @@ class SAMService:
 
         bgr_im = cv2.cvtColor(rgb_im, cv2.COLOR_RGB2BGR)
 
-        #-------------Here we do the model predict which first sends the inputs from req and gets the results then fixes them up to the right format:--------------------------
-        #masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
+        # -------------Here we do the model predict which first sends the inputs from req and gets the results then fixes them up to the right format:--------------------------
+        # masks, boxes, phrases, logits = self.model.predict(image_pil, target_name)
         print("target name", target_name)
         send_string = target_name
         image_stream = io.BytesIO()
-        image_pil.save(image_stream, format="JPEG")  #Save image in JPEG format
-        image_data = image_stream.getvalue()  #Get byte data
-        #socket.send(image_data) #Send the serialized image
+        image_pil.save(image_stream, format="JPEG")  # Save image in JPEG format
+        image_data = image_stream.getvalue()  # Get byte data
+        # socket.send(image_data) #Send the serialized image
 
         t0 = time.time()
-        message = [send_string.encode(), image_data, ground.to_bytes(length=1, byteorder='big')]
+        message = [
+            send_string.encode(),
+            image_data,
+            ground.to_bytes(length=1, byteorder="big"),
+        ]
         with self.lock:
-            self.socket.send_multipart(message) #SENDING text and image
+            self.socket.send_multipart(message)  # SENDING text and image
             print("sent text and image data from gsam")
-            #To receive it blocks until it receives
-            message_parts = self.socket.recv_multipart() #RECEIVING metadata for masks and mask bytes
+            # To receive it blocks until it receives
+            message_parts = (
+                self.socket.recv_multipart()
+            )  # RECEIVING metadata for masks and mask bytes
         metadata = message_parts[0].decode()  # Decode as string
         metadata = json.loads(metadata)
         print(f"Received metadata from gsam server: {metadata}")
-        #Bytes
+        # Bytes
         mask_bytes = message_parts[1]
-        if metadata["shape"] == [0]:  # Adjust condition based on your metadata structure
+        if metadata["shape"] == [
+            0
+        ]:  # Adjust condition based on your metadata structure
             print("-----------No masks returned-------------")
             ret = GetDeticResultsResponse()
             ret.success = True
@@ -448,13 +515,17 @@ class SAMService:
             return ret
         else:
             # Deserialize the mask
-            masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(metadata["shape"])
-            print("masks shape", masks.shape) #It is a number of masks by image size np array
+            masks = np.frombuffer(mask_bytes, dtype=metadata["dtype"]).reshape(
+                metadata["shape"]
+            )
+            print(
+                "masks shape", masks.shape
+            )  # It is a number of masks by image size np array
         print("time perception took", time.time() - t0)
 
         image_cv2 = np.array(image_pil)
         print("masks shape", masks.shape)
-        #for mask in masks:
+        # for mask in masks:
         if req.debug_mode:
             mask = masks[0]
             mask = (mask > 0.5).astype(np.uint8)
@@ -462,14 +533,20 @@ class SAMService:
             colored_mask = np.zeros_like(image_cv2, dtype=np.uint8)
             for c in range(3):
                 colored_mask[:, :, c] = mask * color[c]
-            image_cv2 = cv2.bitwise_and(image_cv2, image_cv2, mask=1-mask)  # Keep original image where mask is 0
-            image_cv2 = cv2.add(image_cv2, colored_mask)  # Add colored mask only where mask is 1
+            image_cv2 = cv2.bitwise_and(
+                image_cv2, image_cv2, mask=1 - mask
+            )  # Keep original image where mask is 0
+            image_cv2 = cv2.add(
+                image_cv2, colored_mask
+            )  # Add colored mask only where mask is 1
             cv2.imwrite(f"/tmp/tmp_joe/gsamservice_output_{self.it}.jpg", image_cv2)
         self.it += 1
 
-        #Choose one mask as the mask we are going to use, or aggregate all the masks together that we found. 
-        #Is there a way to see the confidence for it?
-        target_mask = masks[0]#np.asarray(masks[select_idx]) #Here is where we use the masks
+        # Choose one mask as the mask we are going to use, or aggregate all the masks together that we found.
+        # Is there a way to see the confidence for it?
+        target_mask = masks[
+            0
+        ]  # np.asarray(masks[select_idx]) #Here is where we use the masks
 
         # scene_pcd = create_pcd(depth_im, cam_intr, color_im=rgb_im)
         # scene_pts = np.asarray(scene_pcd.points)
@@ -503,10 +580,11 @@ class SAMService:
         # ret.colors = Float32MultiArray(data=scene_rgb.flatten().tolist())
         # ret.target_mask = target_mask_3d.flatten().tolist()
         # ret.background_mask = background_mask_3d.flatten().tolist()
-        ret.target_image_mask = self.bridge.cv2_to_imgmsg(target_mask.astype(np.uint8), encoding="mono8")
+        ret.target_image_mask = self.bridge.cv2_to_imgmsg(
+            target_mask.astype(np.uint8), encoding="mono8"
+        )
         return ret
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
