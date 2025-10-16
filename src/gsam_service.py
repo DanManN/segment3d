@@ -283,7 +283,7 @@ def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
 def send_instance_and_target(img, tar_string, socket):
     mask_instance, _ = send_one(img, "Object.", socket, do_not_track=True)
     mask_target, max_index = send_one(img, tar_string, socket, do_not_track=True)
-    if mask_target is not None:
+    if mask_target is not None and max_index != -1:
         print("mask target shape", mask_target.shape, max_index)
         mask_instance = remove_overlapping_masks(mask_instance)
         mask_instance = remove_target_mask(
