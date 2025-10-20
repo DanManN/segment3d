@@ -284,10 +284,11 @@ def send_instance_and_target(img, tar_string, socket):
     mask_instance, _ = send_one(img, "Object.", socket, do_not_track=True)
     mask_target, max_index = send_one(img, tar_string, socket, do_not_track=True)
     if mask_target is not None and max_index != -1:
+        mask_target = mask_target[max_index]
         print("mask target shape", mask_target.shape, max_index)
         mask_instance = remove_overlapping_masks(mask_instance)
         mask_instance = remove_target_mask(
-            mask_instance, np.expand_dims(mask_target[max_index], axis=0)
+            mask_instance, np.expand_dims(mask_target, axis=0)
         )
     else:
         print("No target mask found")
