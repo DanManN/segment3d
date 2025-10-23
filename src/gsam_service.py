@@ -270,11 +270,13 @@ def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
     """
     if target_mask.ndim >= 3:
         target_mask = target_mask[0]
+        target_mask = cv2.erode(target_mask.astype(float), np.ones((5, 5))).astype(bool)
     encoded_instance_mask = np.zeros(
         (instance_mask.shape[1], instance_mask.shape[2]), dtype=np.uint32
     )  # [height, width]
     for i in range(instance_mask.shape[0]):
-        encoded_instance_mask |= instance_mask[i].astype(np.uint32) << (i + 1)
+        cur_mask = cv2.erode(instance_mask[i].astype(float), np.ones((5, 5))).astype(bool)
+        encoded_instance_mask |= cur_mask.astype(np.uint32) << (i + 1)
     encoded_instance_mask |= target_mask.astype(np.uint32)
 
     return encoded_instance_mask
@@ -283,10 +285,10 @@ def instance_and_target_masks_to_one_mask(instance_mask, target_mask):
 def send_instance_and_target(img, tar_string, socket):
     mask_instance, _ = send_one(img, "Object.", socket, do_not_track=True)
     mask_target, max_index = send_one(img, tar_string, socket, do_not_track=True)
+    mask_instance = remove_overlapping_masks(mask_instance)
     if mask_target is not None and max_index != -1:
         mask_target = mask_target[max_index]
         print("mask target shape", mask_target.shape, max_index)
-        mask_instance = remove_overlapping_masks(mask_instance)
         mask_instance = remove_target_mask(
             mask_instance, np.expand_dims(mask_target, axis=0)
         )
